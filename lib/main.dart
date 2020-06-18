@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:agro_quarry/listview.dart';
 import 'package:diacritic/diacritic.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
@@ -20,34 +21,46 @@ class MyApp extends StatelessWidget {
         primarySwatch: Colors.blue,
         visualDensity: VisualDensity.adaptivePlatformDensity,
       ),
-      home: MyHomePage(title: 'Agro Quarry'),
+      home: MyHomePage(),
     );
   }
 }
 
 class MyHomePage extends StatefulWidget {
-  MyHomePage({Key key, this.title}) : super(key: key);
-  final String title;
-
   @override
   _MyHomePageState createState() => _MyHomePageState();
 }
 
 class _MyHomePageState extends State<MyHomePage> {
-  List<Cotacao> cotacoes = List<Cotacao>();
+  RestResponse cotacoes;
   bool loading = true;
   bool error = false;
+  ScrollController controller;
 
   @override
   void initState() {
     _loadCotacoes();
+    controller = new ScrollController()..addListener(_scrollListener);
     super.initState();
+  }
+
+  @override
+  void dispose() {
+    controller.removeListener(_scrollListener);
+    super.dispose();
+  }
+
+  void _scrollListener() {
+    print(controller.position.extentAfter);
+    if (controller.position.extentAfter < 50) {
+      print('niggadrill');
+    }
   }
 
   Future<void> _loadCotacoes({String path}) async {
     String url;
     path == null
-        ? url = 'http://agroquarry.herokuapp.com/soja'
+        ? url = 'http://agroquarry.herokuapp.com/soja/'
         : url = 'http://agroquarry.herokuapp.com/' + path;
     print(url);
     setState(() {
@@ -56,14 +69,9 @@ class _MyHomePageState extends State<MyHomePage> {
     Dio dio = Dio();
     try {
       Response response = await dio.get(url);
-      RestResponse _cotacoes = RestResponse.fromJson(response.data);
-      cotacoes.clear();
-      if (_cotacoes.results.isNotEmpty) {
-        for (var i = 0; i < _cotacoes.results.length; i++) {
 
-          cotacoes.add(_cotacoes.results[i]);
-        }
-      }
+      cotacoes = RestResponse.fromJson(response.data);
+
       setState(() {
         error = false;
       });
@@ -79,13 +87,22 @@ class _MyHomePageState extends State<MyHomePage> {
     }
   }
 
-  List value;
+  Future<void> loadMore({@required String url}) async {
+    Dio dio = Dio();
+    Response response = await dio.get(url);
+    RestResponse _cotacoes = RestResponse.fromJson(response.data);
+    cotacoes.addCotacao(_cotacoes.results);
+    cotacoes.updateNext(_cotacoes.next);
+    setState(() {});
+    return;
+  }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
         appBar: AppBar(
-          title: Text(widget.title),
+          title: Text(
+              'Agro Quarry - ${cotacoes.results.length}/${cotacoes.count} resultados'),
           actions: <Widget>[
             PopupMenuButton<String>(
               onSelected: (String option) async {
@@ -110,14 +127,19 @@ class _MyHomePageState extends State<MyHomePage> {
               ? Center(child: CircularProgressIndicator())
               : error
                   ? _messageWidget(message: 'Erro ao carregar cotações!')
-                  : cotacoes.isEmpty
+                  : cotacoes.results.isEmpty
                       ? _messageWidget(
                           message: 'Não há nenhuma cotação disponível!')
                       : Center(
-                          child: ListView.builder(
-                              itemCount: cotacoes.length,
+                          child: IncrementallyLoadingListView(
+                              hasMore: cotacoes.hasMorePage,
+                              loadMore: () async {
+                                await loadMore(url: cotacoes.nextUrl());
+                              },
+                              loadMoreOffsetFromBottom: 5,
+                              itemCount: () => cotacoes.results.length,
                               itemBuilder: (context, index) {
-                                Cotacao _cotacao = cotacoes[index];
+                                Cotacao _cotacao = cotacoes.results[index];
                                 return _cotacaoCard(cotacao: _cotacao);
                               }),
                         ),
@@ -190,19 +212,40 @@ class Cotacao {
       );
 }
 
-class RestResponse{
+class RestResponse {
   int count;
   String next;
   String previous;
   List<Cotacao> results;
-  RestResponse({this.count,this.next,this.previous,this.results});
-  factory RestResponse.fromJson(Map<String, dynamic> json){
+
+  RestResponse({this.count, this.next, this.previous, this.results});
+
+  factory RestResponse.fromJson(Map<String, dynamic> json) {
     var list = json['results'] as List;
     List<Cotacao> _cotacoes = list.map((e) => Cotacao.fromJson(e)).toList();
     return RestResponse(
-    count: double.parse(json['count'].toString()).toInt(),
-    next: json['next'].toString(),
-    previous: json['previous'],
-    results: _cotacoes,
-  );}
+      count: double.parse(json['count'].toString()).toInt(),
+      next: json['next'].toString(),
+      previous: json['previous'],
+      results: _cotacoes,
+    );
+  }
+
+  void addCotacao(List<Cotacao> _cotacoes) {
+    _cotacoes.forEach((element) {
+      this.results.add(element);
+    });
+  }
+
+  String nextUrl() {
+    return this.next;
+  }
+
+  void updateNext(String url) {
+    this.next = url;
+  }
+
+  bool hasMorePage() {
+    return this.next != 'null';
+  }
 }

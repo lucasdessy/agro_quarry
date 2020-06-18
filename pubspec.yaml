@@ -32,6 +32,8 @@ dependencies:
   flutter_money_formatter: ^0.8.3
   intl: ^0.15.8
   diacritic: ^0.1.1
+  flutter_paginator: ^0.0.6
+  rxdart: ^0.24.1
 
 dev_dependencies:
   flutter_test:
