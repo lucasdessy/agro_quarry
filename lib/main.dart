@@ -56,19 +56,19 @@ class _MyHomePageState extends State<MyHomePage> {
     Dio dio = Dio();
     try {
       Response response = await dio.get(url);
-      print(response.data);
-      List _cotacoes = response.data;
+      RestResponse _cotacoes = RestResponse.fromJson(response.data);
       cotacoes.clear();
-      if (_cotacoes.isNotEmpty) {
-        for (var i = 0; i < _cotacoes.length; i++) {
-          Cotacao _tempCotacao = Cotacao.fromJson(_cotacoes[i]);
-          cotacoes.add(_tempCotacao);
+      if (_cotacoes.results.isNotEmpty) {
+        for (var i = 0; i < _cotacoes.results.length; i++) {
+
+          cotacoes.add(_cotacoes.results[i]);
         }
       }
       setState(() {
         error = false;
       });
     } catch (e) {
+      print(e);
       setState(() {
         error = true;
       });
@@ -182,10 +182,27 @@ class Cotacao {
 
   Cotacao({this.id, this.data, this.cotacao, this.variacao});
 
-  factory Cotacao.fromJson(dynamic json) => Cotacao(
+  factory Cotacao.fromJson(Map<String, dynamic> json) => Cotacao(
         id: double.parse(json['id'].toString()),
         data: DateTime.parse(json['data'].toString()),
         cotacao: double.parse(json['cotacao'].toString()),
         variacao: double.parse(json['variacao'].toString()),
       );
+}
+
+class RestResponse{
+  int count;
+  String next;
+  String previous;
+  List<Cotacao> results;
+  RestResponse({this.count,this.next,this.previous,this.results});
+  factory RestResponse.fromJson(Map<String, dynamic> json){
+    var list = json['results'] as List;
+    List<Cotacao> _cotacoes = list.map((e) => Cotacao.fromJson(e)).toList();
+    return RestResponse(
+    count: double.parse(json['count'].toString()).toInt(),
+    next: json['next'].toString(),
+    previous: json['previous'],
+    results: _cotacoes,
+  );}
 }
