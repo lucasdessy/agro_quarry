@@ -1,5 +1,3 @@
-import 'dart:convert';
-
 import 'package:agro_quarry/listview.dart';
 import 'package:diacritic/diacritic.dart';
 import 'package:dio/dio.dart';
@@ -35,33 +33,17 @@ class _MyHomePageState extends State<MyHomePage> {
   RestResponse cotacoes;
   bool loading = true;
   bool error = false;
-  ScrollController controller;
-
+  String currentOption;
   @override
   void initState() {
-    _loadCotacoes();
-    controller = new ScrollController()..addListener(_scrollListener);
+    currentOption = 'Soja';
+    _loadCotacoes(path: removeDiacritics(currentOption.toLowerCase()));
     super.initState();
   }
 
-  @override
-  void dispose() {
-    controller.removeListener(_scrollListener);
-    super.dispose();
-  }
-
-  void _scrollListener() {
-    print(controller.position.extentAfter);
-    if (controller.position.extentAfter < 50) {
-      print('niggadrill');
-    }
-  }
-
-  Future<void> _loadCotacoes({String path}) async {
+  Future<void> _loadCotacoes({@required String path}) async {
     String url;
-    path == null
-        ? url = 'http://agroquarry.herokuapp.com/soja/'
-        : url = 'http://agroquarry.herokuapp.com/' + path;
+ url = 'http://agroquarry.herokuapp.com/' + path;
     print(url);
     setState(() {
       loading = true;
@@ -101,12 +83,16 @@ class _MyHomePageState extends State<MyHomePage> {
   Widget build(BuildContext context) {
     return Scaffold(
         appBar: AppBar(
-          title: Text(
-              'Agro Quarry - ${cotacoes.results.length}/${cotacoes.count} resultados'),
+          title: Text(loading? 'Carregando':
+            '$currentOption - Mostrando ${cotacoes.results.length} de ${cotacoes.count}'
+          ),
           actions: <Widget>[
             PopupMenuButton<String>(
               onSelected: (String option) async {
-                _loadCotacoes(path: removeDiacritics(option.toLowerCase()));
+                setState(() {
+                  currentOption = option;
+                });
+                _loadCotacoes(path: removeDiacritics(currentOption.toLowerCase()));
               },
               itemBuilder: (context) {
                 return {'Soja', 'Milho', 'Café'}
@@ -121,7 +107,7 @@ class _MyHomePageState extends State<MyHomePage> {
         ),
         body: RefreshIndicator(
           onRefresh: () async {
-            await _loadCotacoes();
+            await _loadCotacoes(path: removeDiacritics(currentOption.toLowerCase()));
           },
           child: loading
               ? Center(child: CircularProgressIndicator())
@@ -159,7 +145,7 @@ class _MyHomePageState extends State<MyHomePage> {
               ),
               RaisedButton(
                 onPressed: () async {
-                  await _loadCotacoes();
+                  await _loadCotacoes(path: removeDiacritics(currentOption.toLowerCase()));
                 },
                 child: Text(
                   'Recarregar',
