@@ -4,6 +4,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_money_formatter/flutter_money_formatter.dart';
 import 'package:intl/intl.dart';
+import 'package:charts_flutter/flutter.dart' as charts;
 
 void main() {
   runApp(MyApp());
@@ -34,6 +35,7 @@ class _MyHomePageState extends State<MyHomePage> {
   bool loading = true;
   bool error = false;
   String currentOption;
+
   @override
   void initState() {
     currentOption = 'Soja';
@@ -43,7 +45,7 @@ class _MyHomePageState extends State<MyHomePage> {
 
   Future<void> _loadCotacoes({@required String path}) async {
     String url;
- url = 'http://agroquarry.herokuapp.com/' + path;
+    url = 'http://agroquarry.herokuapp.com/' + path;
     print(url);
     setState(() {
       loading = true;
@@ -79,20 +81,38 @@ class _MyHomePageState extends State<MyHomePage> {
     return;
   }
 
+  List<charts.Series<TimeSeriesSales, DateTime>> _createSampleData() {
+    List<TimeSeriesSales> data = List<TimeSeriesSales>();
+    cotacoes.results.forEach((element) {
+      data.add(TimeSeriesSales(element.data, element.cotacao));
+    });
+
+    return [
+      new charts.Series<TimeSeriesSales, DateTime>(
+        id: 'Sales',
+        colorFn: (_, __) => charts.MaterialPalette.blue.shadeDefault,
+        domainFn: (TimeSeriesSales sales, _) => sales.time,
+        measureFn: (TimeSeriesSales sales, _) => sales.sales,
+        data: data,
+      )
+    ];
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
         appBar: AppBar(
-          title: Text(loading? 'Carregando':
-            '$currentOption - Mostrando ${cotacoes.results.length} de ${cotacoes.count}'
-          ),
+          title: Text(loading
+              ? 'Carregando'
+              : '$currentOption - Mostrando ${cotacoes.results.length} de ${cotacoes.count}'),
           actions: <Widget>[
             PopupMenuButton<String>(
               onSelected: (String option) async {
                 setState(() {
                   currentOption = option;
                 });
-                _loadCotacoes(path: removeDiacritics(currentOption.toLowerCase()));
+                _loadCotacoes(
+                    path: removeDiacritics(currentOption.toLowerCase()));
               },
               itemBuilder: (context) {
                 return {'Soja', 'Milho', 'Café'}
@@ -107,7 +127,8 @@ class _MyHomePageState extends State<MyHomePage> {
         ),
         body: RefreshIndicator(
           onRefresh: () async {
-            await _loadCotacoes(path: removeDiacritics(currentOption.toLowerCase()));
+            await _loadCotacoes(
+                path: removeDiacritics(currentOption.toLowerCase()));
           },
           child: loading
               ? Center(child: CircularProgressIndicator())
@@ -116,18 +137,29 @@ class _MyHomePageState extends State<MyHomePage> {
                   : cotacoes.results.isEmpty
                       ? _messageWidget(
                           message: 'Não há nenhuma cotação disponível!')
-                      : Center(
-                          child: IncrementallyLoadingListView(
-                              hasMore: cotacoes.hasMorePage,
-                              loadMore: () async {
-                                await loadMore(url: cotacoes.nextUrl());
-                              },
-                              loadMoreOffsetFromBottom: 5,
-                              itemCount: () => cotacoes.results.length,
-                              itemBuilder: (context, index) {
-                                Cotacao _cotacao = cotacoes.results[index];
-                                return _cotacaoCard(cotacao: _cotacao);
-                              }),
+                      : Column(
+                          children: <Widget>[
+                            Container(
+                              height: 150,
+                              child: SimpleTimeSeriesChart(
+                                _createSampleData(),
+                                animate: true,
+                              ),
+                            ),
+                            Expanded(
+                              child: IncrementallyLoadingListView(
+                                  hasMore: cotacoes.hasMorePage,
+                                  loadMore: () async {
+                                    await loadMore(url: cotacoes.nextUrl());
+                                  },
+                                  loadMoreOffsetFromBottom: 5,
+                                  itemCount: () => cotacoes.results.length,
+                                  itemBuilder: (context, index) {
+                                    Cotacao _cotacao = cotacoes.results[index];
+                                    return _cotacaoCard(cotacao: _cotacao);
+                                  }),
+                            ),
+                          ],
                         ),
         ));
   }
@@ -145,7 +177,8 @@ class _MyHomePageState extends State<MyHomePage> {
               ),
               RaisedButton(
                 onPressed: () async {
-                  await _loadCotacoes(path: removeDiacritics(currentOption.toLowerCase()));
+                  await _loadCotacoes(
+                      path: removeDiacritics(currentOption.toLowerCase()));
                 },
                 child: Text(
                   'Recarregar',
@@ -161,7 +194,7 @@ class _MyHomePageState extends State<MyHomePage> {
   Widget _cotacaoCard({@required Cotacao cotacao}) {
     return Card(
       child: ListTile(
-        title: Text('${DateFormat('dd/MM').format(cotacao.data)}'),
+        title: Text('${DateFormat('dd/MM/yyyy').format(cotacao.data)}'),
         trailing: Text(
           'Cotação: R\$ ${formatMoney(cotacao.cotacao)}',
           style: TextStyle(fontSize: 16),
@@ -234,4 +267,27 @@ class RestResponse {
   bool hasMorePage() {
     return this.next != 'null';
   }
+}
+
+class SimpleTimeSeriesChart extends StatelessWidget {
+  final List<charts.Series> seriesList;
+  final bool animate;
+
+  SimpleTimeSeriesChart(this.seriesList, {this.animate});
+
+  @override
+  Widget build(BuildContext context) {
+    return new charts.TimeSeriesChart(
+      seriesList,
+      animate: animate,
+      dateTimeFactory: const charts.LocalDateTimeFactory(),
+    );
+  }
+}
+
+class TimeSeriesSales {
+  final DateTime time;
+  final double sales;
+
+  TimeSeriesSales(this.time, this.sales);
 }
