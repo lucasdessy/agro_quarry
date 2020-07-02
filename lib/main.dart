@@ -2,6 +2,7 @@ import 'package:agro_quarry/listview.dart';
 import 'package:diacritic/diacritic.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_datetime_picker/flutter_datetime_picker.dart';
 import 'package:flutter_money_formatter/flutter_money_formatter.dart';
 import 'package:intl/intl.dart';
 import 'package:charts_flutter/flutter.dart' as charts;
@@ -32,20 +33,31 @@ class MyHomePage extends StatefulWidget {
 
 class _MyHomePageState extends State<MyHomePage> {
   RestResponse cotacoes;
+  bool isCafe = false;
   bool loading = true;
   bool error = false;
   String currentOption;
+  DateTime startDate;
+  DateTime endDate;
 
   @override
   void initState() {
     currentOption = 'Soja';
-    _loadCotacoes(path: removeDiacritics(currentOption.toLowerCase()));
+    _loadCotacoes(path: currentOption);
     super.initState();
   }
 
   Future<void> _loadCotacoes({@required String path}) async {
     String url;
-    url = 'http://agroquarry.herokuapp.com/' + path;
+    url = 'http://agroquarry.herokuapp.com/' +
+        removeDiacritics(path.toLowerCase().replaceAll(' ', '/')) +
+        '?';
+    if (startDate != null) {
+      url += '&data_inicio=${DateFormat('yyyy-MM-dd').format(startDate)}';
+    }
+    if (endDate != null) {
+      url += '&data_fim=${DateFormat('yyyy-MM-dd').format(endDate)}';
+    }
     print(url);
     setState(() {
       loading = true;
@@ -82,20 +94,54 @@ class _MyHomePageState extends State<MyHomePage> {
   }
 
   List<charts.Series<TimeSeriesSales, DateTime>> _createSampleData() {
-    List<TimeSeriesSales> data = List<TimeSeriesSales>();
-    cotacoes.results.forEach((element) {
-      data.add(TimeSeriesSales(element.data, element.cotacao));
-    });
+    if (!isCafe) {
+      List<TimeSeriesSales> data = List<TimeSeriesSales>();
+      cotacoes.results.forEach((element) {
+        data.add(TimeSeriesSales(element.data, element.cotacao));
+      });
 
-    return [
-      new charts.Series<TimeSeriesSales, DateTime>(
-        id: 'Sales',
-        colorFn: (_, __) => charts.MaterialPalette.blue.shadeDefault,
-        domainFn: (TimeSeriesSales sales, _) => sales.time,
-        measureFn: (TimeSeriesSales sales, _) => sales.sales,
-        data: data,
-      )
-    ];
+      return [
+        new charts.Series<TimeSeriesSales, DateTime>(
+          id: 'graph',
+          colorFn: (_, __) => charts.MaterialPalette.blue.shadeDefault,
+          domainFn: (TimeSeriesSales sales, _) => sales.time,
+          measureFn: (TimeSeriesSales sales, _) => sales.sales,
+          data: data,
+          displayName: currentOption,
+        )
+      ];
+    } else {
+      List<TimeSeriesSales> arabica = List<TimeSeriesSales>();
+      cotacoes.results.forEach((element) {
+        if (element.tipo.toLowerCase() == 'arabica') {
+          arabica.add(TimeSeriesSales(element.data, element.cotacao));
+        }
+      });
+      List<TimeSeriesSales> conillon = List<TimeSeriesSales>();
+      cotacoes.results.forEach((element) {
+        if (element.tipo.toLowerCase() == 'conillon') {
+          conillon.add(TimeSeriesSales(element.data, element.cotacao));
+        }
+      });
+      return [
+        new charts.Series<TimeSeriesSales, DateTime>(
+          id: 'arabica',
+          colorFn: (_, __) => charts.MaterialPalette.blue.shadeDefault,
+          domainFn: (TimeSeriesSales sales, _) => sales.time,
+          measureFn: (TimeSeriesSales sales, _) => sales.sales,
+          data: arabica,
+          displayName: 'Arábica',
+        ),
+        new charts.Series<TimeSeriesSales, DateTime>(
+          id: 'conillon',
+          colorFn: (_, __) => charts.MaterialPalette.red.shadeDefault,
+          domainFn: (TimeSeriesSales sales, _) => sales.time,
+          measureFn: (TimeSeriesSales sales, _) => sales.sales,
+          data: conillon,
+          displayName: 'Conillon',
+        )
+      ];
+    }
   }
 
   @override
@@ -104,18 +150,100 @@ class _MyHomePageState extends State<MyHomePage> {
         appBar: AppBar(
           title: Text(loading
               ? 'Carregando'
-              : '$currentOption - Mostrando ${cotacoes.results.length} de ${cotacoes.count}'),
+              : '$currentOption - ${cotacoes?.results?.length} de ${cotacoes?.count}'),
           actions: <Widget>[
+            GestureDetector(
+              onTap: () async {
+                showModalBottomSheet(
+                    context: context,
+                    builder: (context) {
+                      return Container(
+                        child: Wrap(
+                          children: <Widget>[
+                            ListTile(
+                              leading: Icon(
+                                Icons.date_range,
+                                color: Colors.blue,
+                              ),
+                              title: Text(
+                                  'Data de início ${startDate == null ? '' : '- ' + DateFormat('dd/MM/yyyy').format(startDate)}'),
+                              onTap: () async {
+                                await DatePicker.showDatePicker(context,
+                                    locale: LocaleType.pt,
+                                    currentTime: startDate == null
+                                        ? DateTime.now()
+                                        : startDate, onConfirm: (date) {
+                                  setState(() {
+                                    startDate = date;
+                                  });
+                                  _loadCotacoes(path: currentOption);
+                                });
+                                Navigator.of(context).pop();
+                              },
+                            ),
+                            ListTile(
+                              leading: Icon(
+                                Icons.date_range,
+                                color: Colors.green,
+                              ),
+                              title: Text(
+                                  'Data de Término ${endDate == null ? '' : '- ' + DateFormat('dd/MM/yyyy').format(endDate)}'),
+                              onTap: () async {
+                                await DatePicker.showDatePicker(context,
+                                    locale: LocaleType.pt,
+                                    currentTime: endDate == null
+                                        ? DateTime.now()
+                                        : endDate, onConfirm: (date) {
+                                  setState(() {
+                                    endDate = date;
+                                  });
+                                  _loadCotacoes(path: currentOption);
+                                });
+                                Navigator.of(context).pop();
+                              },
+                            ),
+                            ListTile(
+                              leading: Icon(
+                                Icons.clear,
+                                color: Colors.red,
+                              ),
+                              title: Text('Remover filtro'),
+                              onTap: () {
+                                setState(() {
+                                  startDate = null;
+                                  endDate = null;
+                                });
+                                _loadCotacoes(path: currentOption);
+                                Navigator.of(context).pop();
+                              },
+                            ),
+                          ],
+                        ),
+                      );
+                    });
+              },
+              child: Icon(Icons.filter_list),
+            ),
             PopupMenuButton<String>(
               onSelected: (String option) async {
                 setState(() {
+                  if (option == 'Café') {
+                    isCafe = true;
+                  } else {
+                    isCafe = false;
+                  }
                   currentOption = option;
                 });
-                _loadCotacoes(
-                    path: removeDiacritics(currentOption.toLowerCase()));
+                _loadCotacoes(path: currentOption);
               },
               itemBuilder: (context) {
-                return {'Soja', 'Milho', 'Café'}
+                return {
+                  'Soja',
+                  'Milho',
+                  'Café',
+                  'Café Conillon',
+                  'Café Arábica'
+                }
                     .map((e) => PopupMenuItem(
                           value: e,
                           child: Text(e),
@@ -127,8 +255,7 @@ class _MyHomePageState extends State<MyHomePage> {
         ),
         body: RefreshIndicator(
           onRefresh: () async {
-            await _loadCotacoes(
-                path: removeDiacritics(currentOption.toLowerCase()));
+            await _loadCotacoes(path: currentOption);
           },
           child: loading
               ? Center(child: CircularProgressIndicator())
@@ -155,7 +282,7 @@ class _MyHomePageState extends State<MyHomePage> {
                                   loadMoreOffsetFromBottom: 5,
                                   itemCount: () => cotacoes.results.length,
                                   itemBuilder: (context, index) {
-                                    Cotacao _cotacao = cotacoes.results[index];
+                                    Results _cotacao = cotacoes.results[index];
                                     return _cotacaoCard(cotacao: _cotacao);
                                   }),
                             ),
@@ -177,8 +304,7 @@ class _MyHomePageState extends State<MyHomePage> {
               ),
               RaisedButton(
                 onPressed: () async {
-                  await _loadCotacoes(
-                      path: removeDiacritics(currentOption.toLowerCase()));
+                  await _loadCotacoes(path: currentOption);
                 },
                 child: Text(
                   'Recarregar',
@@ -191,7 +317,7 @@ class _MyHomePageState extends State<MyHomePage> {
         ),
       );
 
-  Widget _cotacaoCard({@required Cotacao cotacao}) {
+  Widget _cotacaoCard({@required Results cotacao}) {
     return Card(
       child: ListTile(
         title: Text('${DateFormat('dd/MM/yyyy').format(cotacao.data)}'),
@@ -199,7 +325,8 @@ class _MyHomePageState extends State<MyHomePage> {
           'Cotação: R\$ ${formatMoney(cotacao.cotacao)}',
           style: TextStyle(fontSize: 16),
         ),
-        subtitle: Text('Variação: R\$ ${formatMoney(cotacao.variacao)}'),
+        subtitle: Text(
+            'Variação: R\$ ${formatMoney(cotacao.variacao)} ${isCafe ? '\nTipo do café: ${cotacao.tipo}' : ''}'),
       ),
     );
   }
@@ -215,42 +342,38 @@ class _MyHomePageState extends State<MyHomePage> {
   }
 }
 
-class Cotacao {
-  double id;
-  DateTime data;
-  double cotacao;
-  double variacao;
-
-  Cotacao({this.id, this.data, this.cotacao, this.variacao});
-
-  factory Cotacao.fromJson(Map<String, dynamic> json) => Cotacao(
-        id: double.parse(json['id'].toString()),
-        data: DateTime.parse(json['data'].toString()),
-        cotacao: double.parse(json['cotacao'].toString()),
-        variacao: double.parse(json['variacao'].toString()),
-      );
-}
-
 class RestResponse {
   int count;
   String next;
   String previous;
-  List<Cotacao> results;
+  List<Results> results;
 
   RestResponse({this.count, this.next, this.previous, this.results});
 
-  factory RestResponse.fromJson(Map<String, dynamic> json) {
-    var list = json['results'] as List;
-    List<Cotacao> _cotacoes = list.map((e) => Cotacao.fromJson(e)).toList();
-    return RestResponse(
-      count: double.parse(json['count'].toString()).toInt(),
-      next: json['next'].toString(),
-      previous: json['previous'],
-      results: _cotacoes,
-    );
+  RestResponse.fromJson(Map<String, dynamic> json) {
+    count = json['count'];
+    next = json['next'];
+    previous = json['previous'];
+    if (json['results'] != null) {
+      results = new List<Results>();
+      json['results'].forEach((v) {
+        results.add(new Results.fromJson(v));
+      });
+    }
   }
 
-  void addCotacao(List<Cotacao> _cotacoes) {
+  Map<String, dynamic> toJson() {
+    final Map<String, dynamic> data = new Map<String, dynamic>();
+    data['count'] = this.count;
+    data['next'] = this.next;
+    data['previous'] = this.previous;
+    if (this.results != null) {
+      data['results'] = this.results.map((v) => v.toJson()).toList();
+    }
+    return data;
+  }
+
+  void addCotacao(List<Results> _cotacoes) {
     _cotacoes.forEach((element) {
       this.results.add(element);
     });
@@ -269,6 +392,34 @@ class RestResponse {
   }
 }
 
+class Results {
+  int id;
+  String tipo;
+  DateTime data;
+  double cotacao;
+  double variacao;
+
+  Results({this.id, this.tipo, this.data, this.cotacao, this.variacao});
+
+  Results.fromJson(Map<String, dynamic> json) {
+    id = json['id'];
+    tipo = json['tipo'];
+    data = DateTime.parse(json['data']);
+    cotacao = json['cotacao'];
+    variacao = json['variacao'];
+  }
+
+  Map<String, dynamic> toJson() {
+    final Map<String, dynamic> data = new Map<String, dynamic>();
+    data['id'] = this.id;
+    data['tipo'] = this.tipo;
+    data['data'] = this.data;
+    data['cotacao'] = this.cotacao;
+    data['variacao'] = this.variacao;
+    return data;
+  }
+}
+
 class SimpleTimeSeriesChart extends StatelessWidget {
   final List<charts.Series> seriesList;
   final bool animate;
@@ -281,6 +432,9 @@ class SimpleTimeSeriesChart extends StatelessWidget {
       seriesList,
       animate: animate,
       dateTimeFactory: const charts.LocalDateTimeFactory(),
+      behaviors: [
+        new charts.SeriesLegend(position: charts.BehaviorPosition.bottom)
+      ],
     );
   }
 }
